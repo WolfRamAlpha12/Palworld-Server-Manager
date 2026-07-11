@@ -1,0 +1,21 @@
+# Local/dev compose (builds from this repo).
+# Homelab/Portainer: use docker-compose.portainer.yml — see deploy.md.
+
+services:
+  manager:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    image: palworld-server-manager:latest
+    container_name: palworld-manager
+    ports:
+      - "3000:3000"
+    volumes:
+      - manager-data:/data
+    environment:
+      PSM_DATA_DIR: /data
+      # PSM_ENCRYPTION_KEY: "change-me-to-a-long-random-string"
+    restart: unless-stopped
+
+volumes:
+  manager-data:

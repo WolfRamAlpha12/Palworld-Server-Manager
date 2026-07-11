@@ -1,0 +1,26 @@
+{
+  "name": "@psm/agent",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "palworld-agent": "./dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -b tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "echo \"no lint configured\""
+  },
+  "dependencies": {
+    "@psm/shared": "workspace:*",
+    "hono": "^4.6.14",
+    "@hono/node-server": "^1.13.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

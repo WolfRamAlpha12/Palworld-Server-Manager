@@ -1,0 +1,36 @@
+[Unit]
+Description=Palworld Server Manager Host Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Simplest: run as root so systemctl can control palworld.service.
+# To run as a normal user instead, grant passwordless sudo for
+# systemctl start|stop|restart|status|is-active|show palworld.service
+# and change User=/Group=/HOME= accordingly.
+User=root
+Group=root
+
+Environment=AGENT_PORT=9100
+# Bind on all interfaces; reach it only over Tailscale (do not open 9100 on a public firewall).
+Environment=AGENT_BIND=0.0.0.0
+Environment=AGENT_SECRET=change-me
+Environment=PALWORLD_SERVICE=palworld.service
+# Adjust these three to match the VPS install:
+Environment=HOME=/home/palworld
+Environment=PALWORLD_INSTALL_ROOT=/home/palworld/Steam/steamapps/common/PalServer
+Environment=STEAMCMD_PATH=/home/palworld/Steam/steamcmd.sh
+
+# Paths after following deploy.md (minimal tree at /opt/psm-agent)
+WorkingDirectory=/opt/psm-agent/apps/agent
+ExecStart=/usr/bin/node /opt/psm-agent/apps/agent/dist/index.js
+
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=palworld-agent
+
+[Install]
+WantedBy=multi-user.target

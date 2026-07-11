@@ -1,0 +1,27 @@
+[Unit]
+Description=Palworld Dedicated Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+Group=%i
+# Override WorkingDirectory / ExecStart via drop-in or EnvironmentFile if needed.
+# Default assumes Steam install under the user's home.
+Environment=HOME=/home/%i
+WorkingDirectory=/home/%i/Steam/steamapps/common/PalServer
+ExecStart=/home/%i/Steam/steamapps/common/PalServer/PalServer.sh -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS
+Restart=on-failure
+RestartSec=15
+KillSignal=SIGINT
+TimeoutStopSec=60
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=palworld
+
+# Soft resource defaults — tune for your VM
+LimitNOFILE=100000
+
+[Install]
+WantedBy=multi-user.target

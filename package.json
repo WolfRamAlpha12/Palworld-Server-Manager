@@ -1,0 +1,20 @@
+{
+  "name": "palworld-server-manager",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Docker-hosted web manager for remote Palworld servers over Tailscale",
+  "scripts": {
+    "dev": "pnpm --filter @psm/web dev",
+    "dev:agent": "pnpm --filter @psm/agent dev",
+    "build": "pnpm -r build",
+    "build:shared": "pnpm --filter @psm/shared build",
+    "build:web": "pnpm --filter @psm/web build",
+    "build:agent": "pnpm --filter @psm/agent build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.0"
+}

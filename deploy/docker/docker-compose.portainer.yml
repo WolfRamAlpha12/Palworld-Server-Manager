@@ -1,0 +1,57 @@
+# Portainer snippet — merge into your existing stack.
+# Build + push the manager image from the Mac (see deploy.md).
+#
+# Networking pattern (Tailscale sidecar):
+#   - ts-palworld joins Tailscale as its own node (MagicDNS = hostname).
+#   - palworld-manager uses network_mode: service:ts-palworld, so it shares
+#     that network namespace and is reachable at http://<tailscale-ip>:3000
+#     (or http://palworld-manager:3000 via MagicDNS).
+#   - No host ports, no Traefik labels, no t3_proxy — not needed for
+#     Tailscale-only access. Other stack services on t3_proxy stay unchanged.
+#
+# One-time: create a reusable auth key in the Tailscale admin console
+# (tagged, preferably ephemeral=false so the node identity persists).
+# Put TS_AUTHKEY in the stack env (same place as TZ / DOCKERDIR / etc.).
+
+  ts-palworld:
+    image: tailscale/tailscale:latest
+    container_name: ts-palworld
+    hostname: palworld-manager
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    networks:
+      - t3_proxy
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    volumes:
+      - $DOCKERDIR/appdata/ts-palworld:/var/lib/tailscale
+    environment:
+      TZ: $TZ
+      TS_AUTHKEY: $TS_AUTHKEY
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_HOSTNAME: palworld-manager
+      # userspace=false + /dev/net/tun = real Tailscale interface (needed for sidecar)
+      TS_USERSPACE: "false"
+      # Optional: advertise only this service's tags in ACLs
+      # TS_EXTRA_ARGS: --advertise-tags=tag:homelab
+
+  palworld-manager:
+    image: yourdockerhubuser/palworld-server-manager:latest
+    container_name: palworld-manager
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    network_mode: service:ts-palworld
+    depends_on:
+      - ts-palworld
+    volumes:
+      - $DOCKERDIR/appdata/palworld-manager:/data
+    environment:
+      TZ: $TZ
+      PSM_DATA_DIR: /data
+      # Keep stable across redeploys so encrypted server passwords still decrypt
+      PSM_ENCRYPTION_KEY: $PSM_ENCRYPTION_KEY

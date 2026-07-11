@@ -1,0 +1,24 @@
+[Unit]
+Description=Palworld Dedicated Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Set User= to the account that owns the Steam/PalServer install
+User=palworld
+Group=palworld
+Environment=HOME=/home/palworld
+WorkingDirectory=/home/palworld/Steam/steamapps/common/PalServer
+ExecStart=/home/palworld/Steam/steamapps/common/PalServer/PalServer.sh -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS
+Restart=on-failure
+RestartSec=15
+KillSignal=SIGINT
+TimeoutStopSec=60
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=palworld
+LimitNOFILE=100000
+
+[Install]
+WantedBy=multi-user.target
