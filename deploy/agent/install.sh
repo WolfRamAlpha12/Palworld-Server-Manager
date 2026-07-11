@@ -63,13 +63,20 @@ install -m 755 "${tmp}" "${INSTALL_PATH}"
 rm -f "${tmp}"
 trap - EXIT
 
-# Prefer unit file shipped alongside this script when present (local checkout / release unpack)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-UNIT_CANDIDATES=(
-  "${SCRIPT_DIR}/../systemd/${UNIT_SRC_NAME}"
-  "${SCRIPT_DIR}/${UNIT_SRC_NAME}"
-  "/tmp/${UNIT_SRC_NAME}"
-)
+# Resolve script path only when running from a real file (not curl | bash).
+# BASH_SOURCE is unset under `set -u` when the script is fed on stdin.
+SCRIPT_PATH="${BASH_SOURCE[0]-}"
+
+SCRIPT_DIR=""
+UNIT_CANDIDATES=()
+if [[ -n "${SCRIPT_PATH}" && -f "${SCRIPT_PATH}" && "${SCRIPT_PATH}" != "/dev/stdin" && "${SCRIPT_PATH}" != "-" ]]; then
+  SCRIPT_DIR="$(cd "$(dirname "${SCRIPT_PATH}")" && pwd)"
+  UNIT_CANDIDATES=(
+    "${SCRIPT_DIR}/../systemd/${UNIT_SRC_NAME}"
+    "${SCRIPT_DIR}/${UNIT_SRC_NAME}"
+  )
+fi
+UNIT_CANDIDATES+=("/tmp/${UNIT_SRC_NAME}")
 
 unit_src=""
 for candidate in "${UNIT_CANDIDATES[@]}"; do
@@ -79,6 +86,13 @@ for candidate in "${UNIT_CANDIDATES[@]}"; do
   fi
 done
 
+update_unit_paths() {
+  sed -i \
+    -e 's|^WorkingDirectory=.*|WorkingDirectory=/opt/psm-agent|' \
+    -e 's|^ExecStart=.*|ExecStart=/usr/bin/node /opt/psm-agent/agent.mjs|' \
+    "${UNIT_DST}"
+}
+
 if [[ -n "${unit_src}" ]]; then
   echo "==> Installing systemd unit from ${unit_src}"
   if [[ -f "${UNIT_DST}" ]]; then
@@ -86,10 +100,7 @@ if [[ -n "${unit_src}" ]]; then
     # when unit already exists; still copy fresh unit on first install.
     echo "    Unit already exists at ${UNIT_DST} — leaving env customizations in place."
     echo "    Updating WorkingDirectory/ExecStart to bundled agent path..."
-    sed -i \
-      -e 's|^WorkingDirectory=.*|WorkingDirectory=/opt/psm-agent|' \
-      -e 's|^ExecStart=.*|ExecStart=/usr/bin/node /opt/psm-agent/agent.mjs|' \
-      "${UNIT_DST}"
+    update_unit_paths
   else
     install -m 644 "${unit_src}" "${UNIT_DST}"
   fi
@@ -100,10 +111,7 @@ else
     echo "==> Downloading systemd unit from release"
     if [[ -f "${UNIT_DST}" ]]; then
       echo "    Unit already exists — updating ExecStart paths only."
-      sed -i \
-        -e 's|^WorkingDirectory=.*|WorkingDirectory=/opt/psm-agent|' \
-        -e 's|^ExecStart=.*|ExecStart=/usr/bin/node /opt/psm-agent/agent.mjs|' \
-        "${UNIT_DST}"
+      update_unit_paths
     else
       curl -fsSL -H "User-Agent: psm-agent-install" -o "${UNIT_DST}" "${unit_url}"
       chmod 644 "${UNIT_DST}"
@@ -143,8 +151,8 @@ EOF
 fi
 
 # Keep a copy of this installer for local re-runs when invoked from a file
-if [[ -f "${BASH_SOURCE[0]}" && "${BASH_SOURCE[0]}" != "/dev/stdin" && "${BASH_SOURCE[0]}" != "-" ]]; then
-  install -m 755 "${BASH_SOURCE[0]}" "${INSTALL_DIR}/install.sh" 2>/dev/null || true
+if [[ -n "${SCRIPT_PATH}" && -f "${SCRIPT_PATH}" && "${SCRIPT_PATH}" != "/dev/stdin" && "${SCRIPT_PATH}" != "-" ]]; then
+  install -m 755 "${SCRIPT_PATH}" "${INSTALL_DIR}/install.sh" 2>/dev/null || true
 fi
 
 systemctl daemon-reload
