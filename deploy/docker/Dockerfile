@@ -1,12 +1,12 @@
 # syntax=docker/dockerfile:1
 
-FROM node:22-bookworm-slim AS base
+FROM node:lts-alpine AS base
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 WORKDIR /app
 
 FROM base AS deps
-RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
-  && rm -rf /var/lib/apt/lists/*
+# Native build tools for better-sqlite3 (and similar)
+RUN apk add --no-cache python3 make g++
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/shared/package.json packages/shared/
 COPY apps/web/package.json apps/web/
@@ -20,15 +20,14 @@ COPY tsconfig.base.json ./
 RUN pnpm --filter @psm/shared build \
   && pnpm --filter @psm/web build
 
-FROM node:22-bookworm-slim AS runner
+FROM node:lts-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PSM_DATA_DIR=/data
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
-  && rm -rf /var/lib/apt/lists/* \
+RUN apk add --no-cache ca-certificates libc6-compat \
   && mkdir -p /data
 
 COPY --from=build /app/apps/web/.next/standalone ./
