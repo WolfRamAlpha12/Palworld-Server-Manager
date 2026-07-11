@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, Fragment, useCallback, useEffect, useState } from "react";
 import {
   createServer,
   deleteServer,
@@ -103,23 +103,24 @@ export default function ServersPage() {
   async function onTest(id: string) {
     try {
       const result = await testServer(id);
+      const detail = [
+        result.agent.ok
+          ? `Agent OK (${result.agent.latencyMs}ms)`
+          : `Agent: ${result.agent.error}`,
+        result.rest.ok
+          ? `REST OK (${result.rest.latencyMs}ms)`
+          : `REST: ${result.rest.error}`,
+      ].join(" · ");
       setTestResults((prev) => ({
         ...prev,
         [id]: {
           agent: result.agent.ok,
           rest: result.rest.ok,
-          detail: [
-            result.agent.ok
-              ? `Agent OK (${result.agent.latencyMs}ms)`
-              : `Agent: ${result.agent.error}`,
-            result.rest.ok
-              ? `REST OK (${result.rest.latencyMs}ms)`
-              : `REST: ${result.rest.error}`,
-          ].join(" · "),
+          detail,
         },
       }));
       if (result.agent.ok && result.rest.ok) toast("Connectivity OK");
-      else toast("Connectivity issues — see details", { error: true });
+      else toast(detail, { error: true });
     } catch (err) {
       toast(err instanceof Error ? err.message : String(err), { error: true });
     }
@@ -254,70 +255,83 @@ export default function ServersPage() {
                 </thead>
                 <tbody>
                   {servers.map((s) => (
-                    <tr key={s.id}>
-                      <td>
-                        <strong>{s.name}</strong>
-                      </td>
-                      <td>
-                        <code>{s.host}</code>
-                      </td>
-                      <td>
-                        REST {s.restPort} · Agent {s.agentPort}
-                      </td>
-                      <td>
-                        {testResults[s.id] ? (
-                          <span
-                            className={`badge ${
-                              testResults[s.id]!.agent && testResults[s.id]!.rest
-                                ? "ok"
-                                : "warn"
-                            }`}
-                            title={testResults[s.id]!.detail}
-                          >
-                            {testResults[s.id]!.agent && testResults[s.id]!.rest
-                              ? "OK"
-                              : "Issues"}
-                          </span>
-                        ) : (
-                          <span className="badge muted">—</span>
-                        )}
-                      </td>
-                      <td>
-                        <div className="btn-row">
-                          <button
-                            className="btn secondary"
-                            type="button"
-                            onClick={() => {
-                              setSelectedId(s.id);
-                              toast(`Selected ${s.name}`);
-                            }}
-                          >
-                            Select
-                          </button>
-                          <button
-                            className="btn secondary"
-                            type="button"
-                            onClick={() => onTest(s.id)}
-                          >
-                            Test
-                          </button>
-                          <button
-                            className="btn secondary"
-                            type="button"
-                            onClick={() => startEdit(s)}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            className="btn danger"
-                            type="button"
-                            onClick={() => onDelete(s.id)}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                    <Fragment key={s.id}>
+                      <tr>
+                        <td>
+                          <strong>{s.name}</strong>
+                        </td>
+                        <td>
+                          <code>{s.host}</code>
+                        </td>
+                        <td>
+                          REST {s.restPort} · Agent {s.agentPort}
+                        </td>
+                        <td>
+                          {testResults[s.id] ? (
+                            <span
+                              className={`badge ${
+                                testResults[s.id]!.agent &&
+                                testResults[s.id]!.rest
+                                  ? "ok"
+                                  : "warn"
+                              }`}
+                            >
+                              {testResults[s.id]!.agent &&
+                              testResults[s.id]!.rest
+                                ? "OK"
+                                : "Issues"}
+                            </span>
+                          ) : (
+                            <span className="badge muted">—</span>
+                          )}
+                        </td>
+                        <td>
+                          <div className="btn-row">
+                            <button
+                              className="btn secondary"
+                              type="button"
+                              onClick={() => {
+                                setSelectedId(s.id);
+                                toast(`Selected ${s.name}`);
+                              }}
+                            >
+                              Select
+                            </button>
+                            <button
+                              className="btn secondary"
+                              type="button"
+                              onClick={() => onTest(s.id)}
+                            >
+                              Test
+                            </button>
+                            <button
+                              className="btn secondary"
+                              type="button"
+                              onClick={() => startEdit(s)}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              className="btn danger"
+                              type="button"
+                              onClick={() => onDelete(s.id)}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      {testResults[s.id] &&
+                      !(testResults[s.id]!.agent && testResults[s.id]!.rest) ? (
+                        <tr>
+                          <td colSpan={5}>
+                            <div className="banner" style={{ marginBottom: 0 }}>
+                              {testResults[s.id]!.detail}
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
