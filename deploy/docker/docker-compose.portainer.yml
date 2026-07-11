@@ -1,5 +1,6 @@
 # Portainer snippet — merge into your existing stack.
-# Build + push the manager image from the Mac (see deploy.md).
+# Manager image is built and pushed by GitHub Actions (see .github/workflows/release.yml).
+# On release tags / main: pull yourdockerhubuser/palworld-server-manager:latest (or a semver tag).
 #
 # Networking pattern (Tailscale sidecar):
 #   - ts-palworld joins Tailscale as its own node (MagicDNS = hostname).
@@ -12,6 +13,7 @@
 # One-time: create a reusable auth key in the Tailscale admin console
 # (tagged, preferably ephemeral=false so the node identity persists).
 # Put TS_AUTHKEY in the stack env (same place as TZ / DOCKERDIR / etc.).
+# Also set repo secrets DOCKERHUB_USERNAME / DOCKERHUB_TOKEN for CI.
 
   ts-palworld:
     image: tailscale/tailscale:latest

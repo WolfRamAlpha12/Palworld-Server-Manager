@@ -22,9 +22,9 @@ Environment=HOME=/home/palworld
 Environment=PALWORLD_INSTALL_ROOT=/home/palworld/Steam/steamapps/common/PalServer
 Environment=STEAMCMD_PATH=/home/palworld/Steam/steamcmd.sh
 
-# Paths after following deploy.md (minimal tree at /opt/psm-agent)
-WorkingDirectory=/opt/psm-agent/apps/agent
-ExecStart=/usr/bin/node /opt/psm-agent/apps/agent/dist/index.js
+# Paths after installing the bundled agent (see deploy/agent/install.sh)
+WorkingDirectory=/opt/psm-agent
+ExecStart=/usr/bin/node /opt/psm-agent/agent.mjs
 
 Restart=on-failure
 RestartSec=5

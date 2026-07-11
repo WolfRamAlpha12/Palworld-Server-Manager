@@ -10,6 +10,7 @@
     "build:shared": "pnpm --filter @psm/shared build",
     "build:web": "pnpm --filter @psm/web build",
     "build:agent": "pnpm --filter @psm/agent build",
+    "build:agent:bundle": "pnpm --filter @psm/agent build:bundle",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck"
   },

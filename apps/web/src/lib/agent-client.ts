@@ -98,6 +98,18 @@ export async function agentUpdateStatus(profile: ServerProfile): Promise<AgentUp
   return agentFetch(profile, "/update");
 }
 
+export async function agentStartSelfUpdate(
+  profile: ServerProfile,
+): Promise<AgentUpdateStatus> {
+  return agentFetch(profile, "/agent-update", { method: "POST" });
+}
+
+export async function agentSelfUpdateStatus(
+  profile: ServerProfile,
+): Promise<AgentUpdateStatus> {
+  return agentFetch(profile, "/agent-update");
+}
+
 export async function probeAgent(
   profile: ServerProfile,
 ): Promise<{ ok: boolean; latencyMs?: number; error?: string; health?: AgentHealth }> {

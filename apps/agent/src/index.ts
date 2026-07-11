@@ -17,6 +17,10 @@ import {
   stopService,
 } from "./systemd.js";
 import { getUpdateStatus, startSteamUpdate } from "./update.js";
+import {
+  getAgentUpdateStatus,
+  startAgentSelfUpdate,
+} from "./self-update.js";
 
 const app = new Hono();
 
@@ -86,6 +90,20 @@ app.get("/config", async (c) => {
 });
 
 app.put("/config", async (c) => {
+  // Palworld rewrites PalWorldSettings.ini from in-memory state on shutdown.
+  // Reject writes while the service is live so edits are not silently lost.
+  const status = await getStatus();
+  if (status.active) {
+    return c.json(
+      {
+        error:
+          "Server is running. Stop it before saving PalWorldSettings.ini, or edits will be overwritten on shutdown.",
+        status,
+      },
+      409,
+    );
+  }
+
   const body = (await c.req.json()) as AgentConfigUpdateRequest;
   const result = await writeConfig({
     settings: body.settings,
@@ -117,6 +135,15 @@ app.post("/update", async (c) => {
 
 app.get("/update", async (c) => {
   return c.json(getUpdateStatus());
+});
+
+app.post("/agent-update", async (c) => {
+  const status = startAgentSelfUpdate();
+  return c.json(status);
+});
+
+app.get("/agent-update", async (c) => {
+  return c.json(getAgentUpdateStatus());
 });
 
 app.onError((err, c) => {

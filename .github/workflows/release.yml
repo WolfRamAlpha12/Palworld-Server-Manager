@@ -1,0 +1,132 @@
+name: Build and release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: read
+
+env:
+  IMAGE_NAME: palworld-server-manager
+
+jobs:
+  docker:
+    name: Build and push manager image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
+            type=semver,pattern={{version}}
+            type=sha,prefix=sha-
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  agent:
+    name: Bundle host agent
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Determine agent version
+        id: ver
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=0.0.0-sha.${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bundle agent
+        env:
+          PSM_AGENT_VERSION: ${{ steps.ver.outputs.version }}
+        run: pnpm --filter @psm/agent build:bundle
+
+      - name: Stage release assets
+        run: |
+          mkdir -p dist-agent
+          cp apps/agent/dist/agent.mjs dist-agent/agent.mjs
+          cp deploy/agent/install.sh dist-agent/install.sh
+          cp deploy/systemd/palworld-agent.service dist-agent/palworld-agent.service
+          chmod +x dist-agent/agent.mjs dist-agent/install.sh
+          (
+            cd dist-agent
+            sha256sum agent.mjs install.sh palworld-agent.service > SHA256SUMS
+          )
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: psm-agent-${{ steps.ver.outputs.version }}
+          path: dist-agent/
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          notes="$(printf '%s\n' \
+            "### Manager image" \
+            "\`docker pull ${{ secrets.DOCKERHUB_USERNAME }}/palworld-server-manager:${tag#v}\`" \
+            "" \
+            "### Host agent" \
+            "\`\`\`bash" \
+            "curl -fsSL https://github.com/${{ github.repository }}/releases/download/${tag}/install.sh | sudo bash" \
+            "\`\`\`")"
+          gh release create "${tag}" \
+            --title "${tag}" \
+            --notes "${notes}" \
+            dist-agent/agent.mjs \
+            dist-agent/install.sh \
+            dist-agent/palworld-agent.service \
+            dist-agent/SHA256SUMS

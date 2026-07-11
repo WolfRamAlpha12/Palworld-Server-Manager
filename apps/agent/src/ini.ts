@@ -23,10 +23,40 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-/** Ensure PalWorldSettings.ini exists (copy from default if needed). */
+async function isUsableSettingsFile(path: string): Promise<boolean> {
+  if (!(await exists(path))) return false;
+  try {
+    const content = (await readFile(path, "utf8")).trim();
+    // Fresh Palworld boots often leave a 1-byte newline stub here.
+    return content.length > 0 && content.includes("OptionSettings");
+  } catch {
+    return false;
+  }
+}
+
+const MINIMAL_SETTINGS_STUB = `[/Script/Pal.PalGameWorldSettings]
+OptionSettings=(RESTAPIEnabled=True,RESTAPIPort=8212,AdminPassword="")
+`;
+
+/** Read settings content without writing (safe while the server is live). */
+async function resolveSettingsContent(): Promise<{ path: string; content: string }> {
+  const target = settingsIniPath();
+  if (await isUsableSettingsFile(target)) {
+    return { path: target, content: await readFile(target, "utf8") };
+  }
+
+  const def = defaultSettingsIniPath();
+  if (await exists(def)) {
+    return { path: target, content: await readFile(def, "utf8") };
+  }
+
+  return { path: target, content: MINIMAL_SETTINGS_STUB };
+}
+
+/** Ensure PalWorldSettings.ini exists on disk (for writes while stopped). */
 export async function ensureSettingsFile(): Promise<string> {
   const target = settingsIniPath();
-  if (await exists(target)) return target;
+  if (await isUsableSettingsFile(target)) return target;
 
   await mkdir(dirname(target), { recursive: true });
   const def = defaultSettingsIniPath();
@@ -35,23 +65,17 @@ export async function ensureSettingsFile(): Promise<string> {
     return target;
   }
 
-  // Minimal stub if default is missing (server never started)
-  const stub = `[/Script/Pal.PalGameWorldSettings]
-OptionSettings=(RESTAPIEnabled=True,RESTAPIPort=8212,AdminPassword="")
-`;
-  await writeFile(target, stub, "utf8");
+  await writeFile(target, MINIMAL_SETTINGS_STUB, "utf8");
   return target;
 }
 
 export async function readRawSettings(): Promise<Record<string, string>> {
-  const path = await ensureSettingsFile();
-  const content = await readFile(path, "utf8");
+  const { content } = await resolveSettingsContent();
   return parseIni(content).settings;
 }
 
 export async function readConfig() {
-  const path = await ensureSettingsFile();
-  const content = await readFile(path, "utf8");
+  const { path, content } = await resolveSettingsContent();
   const parsed = parseIni(content);
   const typed: Record<string, unknown> = {};
 

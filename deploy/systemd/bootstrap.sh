@@ -1,34 +1,43 @@
 #!/usr/bin/env bash
-# Bootstrap Palworld systemd + host agent on an Ubuntu VM.
-# Run from the repo root on the game host (or copy deploy/ + agent build).
+# Bootstrap Palworld systemd units on an Ubuntu VM.
+# Prefer deploy/agent/install.sh to fetch the bundled agent from GitHub Releases.
+# This script installs/configures systemd units and can optionally call install.sh.
 set -euo pipefail
 
 USER_NAME="${PALWORLD_USER:-palworld}"
 INSTALL_ROOT="${PALWORLD_INSTALL_ROOT:-/home/${USER_NAME}/Steam/steamapps/common/PalServer}"
-AGENT_DIR="${AGENT_DIR:-/opt/palworld-agent}"
+AGENT_DIR="${AGENT_DIR:-/opt/psm-agent}"
 AGENT_SECRET="${AGENT_SECRET:-$(openssl rand -hex 24)}"
 AGENT_PORT="${AGENT_PORT:-9100}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 echo "==> Installing palworld.service"
-sudo install -m 644 deploy/systemd/palworld.service /etc/systemd/system/palworld.service
+sudo install -m 644 "${SCRIPT_DIR}/palworld.service" /etc/systemd/system/palworld.service
 sudo sed -i "s|User=palworld|User=${USER_NAME}|g" /etc/systemd/system/palworld.service
 sudo sed -i "s|Group=palworld|Group=${USER_NAME}|g" /etc/systemd/system/palworld.service
-sudo sed -i "s|/home/palworld|$(getent passwd "${USER_NAME}" | cut -d: -f6)|g" /etc/systemd/system/palworld.service
+HOME_DIR="$(getent passwd "${USER_NAME}" | cut -d: -f6)"
+sudo sed -i "s|/home/palworld|${HOME_DIR}|g" /etc/systemd/system/palworld.service
 
-if [[ ! -d "${AGENT_DIR}" ]]; then
-  echo "==> ${AGENT_DIR} missing — build the agent first:"
-  echo "    pnpm install && pnpm --filter @psm/shared build && pnpm --filter @psm/agent build"
-  echo "    sudo mkdir -p ${AGENT_DIR} && sudo cp -a apps/agent/dist ${AGENT_DIR}/"
-  echo "    sudo cp -a node_modules ${AGENT_DIR}/  # or use a production install"
+if [[ ! -f "${AGENT_DIR}/agent.mjs" ]]; then
+  echo "==> Agent binary missing at ${AGENT_DIR}/agent.mjs"
+  if [[ -x "${REPO_ROOT}/deploy/agent/install.sh" ]]; then
+    echo "    Running deploy/agent/install.sh..."
+    sudo AGENT_DIR="${AGENT_DIR}" AGENT_SKIP_RESTART=1 bash "${REPO_ROOT}/deploy/agent/install.sh"
+  else
+    echo "    Install with:"
+    echo "      curl -fsSL https://github.com/WolfRamAlpha12/Palworld-Server-Manager/releases/latest/download/install.sh | sudo bash"
+    exit 1
+  fi
 fi
 
 echo "==> Installing palworld-agent.service"
-sudo install -m 644 deploy/systemd/palworld-agent.service /etc/systemd/system/palworld-agent.service
-sudo sed -i "s|User=palworld|User=${USER_NAME}|g" /etc/systemd/system/palworld-agent.service
-sudo sed -i "s|Group=palworld|Group=${USER_NAME}|g" /etc/systemd/system/palworld-agent.service
+sudo install -m 644 "${SCRIPT_DIR}/palworld-agent.service" /etc/systemd/system/palworld-agent.service
 sudo sed -i "s|AGENT_SECRET=change-me|AGENT_SECRET=${AGENT_SECRET}|g" /etc/systemd/system/palworld-agent.service
 sudo sed -i "s|AGENT_PORT=9100|AGENT_PORT=${AGENT_PORT}|g" /etc/systemd/system/palworld-agent.service
 sudo sed -i "s|PALWORLD_INSTALL_ROOT=.*|PALWORLD_INSTALL_ROOT=${INSTALL_ROOT}|g" /etc/systemd/system/palworld-agent.service
+sudo sed -i "s|HOME=/home/palworld|HOME=${HOME_DIR}|g" /etc/systemd/system/palworld-agent.service
+sudo sed -i "s|STEAMCMD_PATH=/home/palworld/Steam/steamcmd.sh|STEAMCMD_PATH=${HOME_DIR}/Steam/steamcmd.sh|g" /etc/systemd/system/palworld-agent.service
 
 # Ensure settings dir exists; copy default INI if present
 SETTINGS_DIR="${INSTALL_ROOT}/Pal/Saved/Config/LinuxServer"

@@ -2,10 +2,13 @@ import { NextResponse } from "next/server";
 import { getServer } from "@/lib/db";
 import {
   agentGetConfig,
+  agentHealth,
   agentLogs,
   agentPutConfig,
   agentRestart,
+  agentSelfUpdateStatus,
   agentStart,
+  agentStartSelfUpdate,
   agentStartUpdate,
   agentStatus,
   agentStop,
@@ -28,6 +31,8 @@ export async function GET(req: Request, ctx: Ctx) {
     switch (action) {
       case "status":
         return NextResponse.json(await agentStatus(server));
+      case "health":
+        return NextResponse.json(await agentHealth(server));
       case "config":
         return NextResponse.json(await agentGetConfig(server));
       case "logs": {
@@ -40,6 +45,8 @@ export async function GET(req: Request, ctx: Ctx) {
       }
       case "update":
         return NextResponse.json(await agentUpdateStatus(server));
+      case "agent-update":
+        return NextResponse.json(await agentSelfUpdateStatus(server));
       default:
         return NextResponse.json({ error: "Unknown action" }, { status: 400 });
     }
@@ -67,6 +74,8 @@ export async function POST(req: Request, ctx: Ctx) {
         return NextResponse.json(await agentRestart(server));
       case "update":
         return NextResponse.json(await agentStartUpdate(server));
+      case "agent-update":
+        return NextResponse.json(await agentStartSelfUpdate(server));
       default:
         return NextResponse.json({ error: "Unknown action" }, { status: 400 });
     }
@@ -104,9 +113,11 @@ export async function PUT(req: Request, ctx: Ctx) {
     const result = await agentPutConfig(server, { ...body, ensureRest });
     return NextResponse.json(result);
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const conflict = /\(409\)/.test(message);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : String(err) },
-      { status: 502 },
+      { error: message },
+      { status: conflict ? 409 : 502 },
     );
   }
 }

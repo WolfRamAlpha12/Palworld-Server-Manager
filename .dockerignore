@@ -1,0 +1,18 @@
+# Build context exclusions for deploy/docker/Dockerfile
+.git
+.github
+.cursor
+**/.DS_Store
+**/node_modules
+**/.next
+**/dist
+**/coverage
+**/*.md
+!README.md
+deploy.md
+apps/agent/dist
+apps/web/.next
+data
+*.log
+.env
+.env.*
