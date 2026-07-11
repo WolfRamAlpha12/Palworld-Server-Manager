@@ -3,7 +3,6 @@ name: Build and release
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -14,8 +13,60 @@ env:
   IMAGE_NAME: palworld-server-manager
 
 jobs:
+  version:
+    name: Bump patch version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+      tag: ${{ steps.bump.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Compute next version and push tag
+        id: bump
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+
+          latest="$(git tag -l 'v*' --sort=-v:refname | head -n1 || true)"
+          if [[ -n "${latest}" ]]; then
+            current="${latest#v}"
+            echo "Latest git tag: ${latest}"
+          else
+            current="$(node -p "require('./package.json').version")"
+            echo "No v* tags found; treating package.json ${current} as already released"
+          fi
+
+          if [[ ! "${current}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Refusing to bump non-semver version: ${current}" >&2
+            exit 1
+          fi
+
+          version="$(printf '%s' "${current}" | awk -F. '{printf "%d.%d.%d", $1, $2, $3+1}')"
+          tag="v${version}"
+
+          if git rev-parse "${tag}" >/dev/null 2>&1; then
+            echo "Tag ${tag} already exists" >&2
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${tag}" -m "Release ${tag}"
+          git push origin "refs/tags/${tag}"
+
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "Released ${tag}"
+
   docker:
     name: Build and push manager image
+    needs: version
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -39,8 +90,8 @@ jobs:
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
-            type=semver,pattern={{version}}
+            type=raw,value=latest
+            type=raw,value=${{ needs.version.outputs.version }}
             type=sha,prefix=sha-
 
       - name: Build and push
@@ -57,6 +108,7 @@ jobs:
 
   agent:
     name: Bundle host agent
+    needs: version
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -76,18 +128,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Determine agent version
-        id: ver
-        run: |
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
-          else
-            echo "version=0.0.0-sha.${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Bundle agent
         env:
-          PSM_AGENT_VERSION: ${{ steps.ver.outputs.version }}
+          PSM_AGENT_VERSION: ${{ needs.version.outputs.version }}
         run: pnpm --filter @psm/agent build:bundle
 
       - name: Stage release assets
@@ -105,19 +148,19 @@ jobs:
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v7
         with:
-          name: psm-agent-${{ steps.ver.outputs.version }}
+          name: psm-agent-${{ needs.version.outputs.version }}
           path: dist-agent/
           if-no-files-found: error
 
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="${GITHUB_REF#refs/tags/}"
+          tag="${{ needs.version.outputs.tag }}"
+          version="${{ needs.version.outputs.version }}"
           notes="$(printf '%s\n' \
             "### Manager image" \
-            "\`docker pull ${{ secrets.DOCKERHUB_USERNAME }}/palworld-server-manager:${tag#v}\`" \
+            "\`docker pull ${{ secrets.DOCKERHUB_USERNAME }}/palworld-server-manager:${version}\`" \
             "" \
             "### Host agent" \
             "\`\`\`bash" \
@@ -126,6 +169,7 @@ jobs:
           gh release create "${tag}" \
             --title "${tag}" \
             --notes "${notes}" \
+            --target "${{ github.sha }}" \
             dist-agent/agent.mjs \
             dist-agent/install.sh \
             dist-agent/palworld-agent.service \
