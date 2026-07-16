@@ -53,6 +53,5 @@ Thumbs.db
 deploy.md
 *.plan.md
 
-# Local README until a generic one is ready
-# (remote already has a placeholder README.md)
-/README.md
+# Local documentation
+/README.local.md
